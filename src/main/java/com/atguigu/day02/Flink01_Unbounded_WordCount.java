@@ -1,7 +1,9 @@
 package com.atguigu.day02;
 
+import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
@@ -20,7 +22,10 @@ public class Flink01_Unbounded_WordCount {
 
         //TODO env全局指定
         // 并行度设置为1，为了方便查看
-//        env.setParallelism(2);
+        env.setParallelism(1);
+
+        //全局都不串
+//        env.disableOperatorChaining();
 
         //2.从端口（无界）读取数据
         DataStreamSource<String> streamSource = env.socketTextStream("hadoop102", 9999);
@@ -43,12 +48,20 @@ public class Flink01_Unbounded_WordCount {
                 return Tuple2.of(value, 1);
             }
         })
+                //与前面都断开
+//                .startNewChain()
+                //与前后都断开
+//                .disableChaining()
                 //TODO 算子指定
 //                .setParallelism(3)
+                //设置新的共享组（共享的是slot）
+                .slotSharingGroup("group1")
                 ;
 
+        SingleOutputStreamOperator<Tuple2<String, Integer>> returns = wordToOneDStream.map(r -> r).returns(Types.TUPLE(Types.STRING, Types.INT));
+
         //5.将相同单词的数据聚合到一块
-        KeyedStream<Tuple2<String, Integer>, Tuple> keyedStream = wordToOneDStream.keyBy(0);
+        KeyedStream<Tuple2<String, Integer>, Tuple> keyedStream = returns.keyBy(0);
 
         //6.做累加操作
         SingleOutputStreamOperator<Tuple2<String, Integer>> result = keyedStream.sum(1);
